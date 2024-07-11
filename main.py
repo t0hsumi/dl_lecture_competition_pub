@@ -11,6 +11,8 @@ import torch.nn as nn
 import torchvision
 from torchvision import transforms
 
+import os
+
 
 def set_seed(seed):
     random.seed(seed)
@@ -363,6 +365,7 @@ def main():
     # deviceの設定
     set_seed(42)
     device = "cuda" if torch.cuda.is_available() else "cpu"
+    torch.backends.cudnn.benchmark = True
 
     # dataloader / model
     transform = transforms.Compose([
@@ -373,8 +376,12 @@ def main():
     test_dataset = VQADataset(df_path="./data/valid.json", image_dir="./data/valid", transform=transform, answer=False)
     test_dataset.update_dict(train_dataset)
 
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=128, shuffle=True)
-    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=1, shuffle=False)
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=128, shuffle=True,
+                                               num_workers=int(os.cpu_count()/2),
+                                               pin_memory=True)
+    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=1, shuffle=False,
+                                               num_workers=int(os.cpu_count()/2),
+                                               pin_memory=True)
 
     ## data augmentation
     transform1 = transforms.Compose([
@@ -382,7 +389,9 @@ def main():
         transforms.RandomRotation(degrees=(-180, 180)),
         transforms.ToTensor()])
     train_dataset1 = VQADataset(df_path="./data/train.json", image_dir="./data/train", transform=transform1)
-    train_loader1 = torch.utils.data.DataLoader(train_dataset1, batch_size=128, shuffle=True)
+    train_loader1 = torch.utils.data.DataLoader(train_dataset1, batch_size=128, shuffle=True,
+                                               num_workers=int(os.cpu_count()/2),
+                                               pin_memory=True)
 
     model = VQAModel(vocab_size=len(train_dataset.question2idx)+1, n_answer=len(train_dataset.answer2idx)).to(device)
 
@@ -399,7 +408,7 @@ def main():
               f"train loss: {train_loss:.4f}\n"
               f"train acc: {train_acc:.4f}\n"
               f"train simple acc: {train_simple_acc:.4f}")
-        
+
         train_loss, train_acc, train_simple_acc, train_time = train(model, train_loader1, optimizer, criterion, device)
         print(f"【{epoch + 1}/{num_epoch}】\n"
               f"train time: {train_time:.2f} [s]\n"
