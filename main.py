@@ -376,6 +376,14 @@ def main():
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=128, shuffle=True)
     test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=1, shuffle=False)
 
+    ## data augmentation
+    transform1 = transforms.Compose([
+        transforms.Resize((224, 224)),
+        transforms.RandomRotation(degrees=(-180, 180)),
+        transforms.ToTensor()])
+    train_dataset1 = VQADataset(df_path="./data/train.json", image_dir="./data/train", transform=transform1)
+    train_loader1 = torch.utils.data.DataLoader(train_dataset1, batch_size=128, shuffle=True)
+
     model = VQAModel(vocab_size=len(train_dataset.question2idx)+1, n_answer=len(train_dataset.answer2idx)).to(device)
 
     # optimizer / criterion
@@ -386,6 +394,13 @@ def main():
     # train model
     for epoch in range(num_epoch):
         train_loss, train_acc, train_simple_acc, train_time = train(model, train_loader, optimizer, criterion, device)
+        print(f"【{epoch + 1}/{num_epoch}】\n"
+              f"train time: {train_time:.2f} [s]\n"
+              f"train loss: {train_loss:.4f}\n"
+              f"train acc: {train_acc:.4f}\n"
+              f"train simple acc: {train_simple_acc:.4f}")
+        
+        train_loss, train_acc, train_simple_acc, train_time = train(model, train_loader1, optimizer, criterion, device)
         print(f"【{epoch + 1}/{num_epoch}】\n"
               f"train time: {train_time:.2f} [s]\n"
               f"train loss: {train_loss:.4f}\n"
