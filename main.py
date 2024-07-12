@@ -12,6 +12,8 @@ import torchvision
 from torchvision import transforms
 
 import os
+import datetime
+now = datetime.datetime.now()
 
 
 def set_seed(seed):
@@ -427,8 +429,9 @@ def main():
 
     submission = [train_dataset.idx2answer[id] for id in submission]
     submission = np.array(submission)
-    torch.save(model.state_dict(), "model.pth")
-    np.save("submission.npy", submission)
+    os.mkdir("outputs/" + now.strftime('%Y%m%d_%H%M'))
+    torch.save(model.state_dict(), "outputs/" + now.strftime('%Y%m%d_%H%M') + "/model.pth")
+    np.save("outputs/" + now.strftime('%Y%m%d_%H%M') + "/submission.npy", submission)
 
 if __name__ == "__main__":
     main()
