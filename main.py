@@ -392,7 +392,8 @@ def main():
     # dataloader / model
     transform = transforms.Compose([
         transforms.Resize((224, 224)),
-        transforms.ToTensor()
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
     tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
     train_dataset = VQADataset(df_path="./data/train.json", image_dir="./data/train", tokenizer=tokenizer, transform=transform)
@@ -410,7 +411,9 @@ def main():
     transform1 = transforms.Compose([
         transforms.Resize((224, 224)),
         transforms.RandomRotation(degrees=(-180, 180)),
-        transforms.ToTensor()])
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    ])
     train_dataset1 = VQADataset(df_path="./data/train.json", image_dir="./data/train", tokenizer=tokenizer, transform=transform1)
     train_loader1 = torch.utils.data.DataLoader(train_dataset1, batch_size=64, shuffle=True,
                                                num_workers=int(os.cpu_count()/2),
