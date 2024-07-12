@@ -13,7 +13,6 @@ from torchvision import transforms
 
 import os
 import datetime
-now = datetime.datetime.now()
 from transformers import BertTokenizer, BertModel
 import gc
 
@@ -388,6 +387,7 @@ def main():
     set_seed(42)
     device = "cuda" if torch.cuda.is_available() else "cpu"
     torch.backends.cudnn.benchmark = True
+    now = datetime.datetime.now()
 
     # dataloader / model
     transform = transforms.Compose([
