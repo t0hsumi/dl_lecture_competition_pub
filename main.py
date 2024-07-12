@@ -1,4 +1,4 @@
-gmport re
+import re
 import random
 import time
 from statistics import mode
