@@ -15,6 +15,7 @@ import os
 import datetime
 from transformers import BertTokenizer, BertModel
 import gc
+import pandas as pd
 
 def set_seed(seed):
     random.seed(seed)
@@ -74,20 +75,9 @@ class VQADataset(torch.utils.data.Dataset):
         self.answer = answer
         self.tokenizer = tokenizer
 
-        # question / answerの辞書を作成
-        self.question2idx = {}
-        self.answer2idx = {}
-        self.idx2question = {}
-        self.idx2answer = {}
-
-        # 質問文に含まれる単語を辞書に追加
-        for question in self.df["question"]:
-            question = process_text(question)
-            words = question.split(" ")
-            for word in words:
-                if word not in self.question2idx:
-                    self.question2idx[word] = len(self.question2idx)
-        self.idx2question = {v: k for k, v in self.question2idx.items()}  # 逆変換用の辞書(question)
+        answer_copus = pd.read_csv("./class_mapping.csv")
+        self.answer2idx = dict(zip(answer_copus["answer"], answer_copus["class_id"]))
+        self.idx2answer = {v: k for k, v in self.answer2idx.items()}
 
         if self.answer:
             # 回答に含まれる単語を辞書に追加
@@ -108,9 +98,7 @@ class VQADataset(torch.utils.data.Dataset):
         dataset : Dataset
             訓練データのDataset
         """
-        self.question2idx = dataset.question2idx
         self.answer2idx = dataset.answer2idx
-        self.idx2question = dataset.idx2question
         self.idx2answer = dataset.idx2answer
 
     def __getitem__(self, idx):
@@ -293,7 +281,7 @@ def ResNet50():
 
 
 class VQAModel(nn.Module):
-    def __init__(self, vocab_size: int, n_answer: int):
+    def __init__(self, n_answer: int):
         super().__init__()
         self.resnet = ResNet50()
         self.bert = BertModel.from_pretrained("bert-base-uncased")
@@ -425,7 +413,7 @@ def main():
                                                num_workers=int(os.cpu_count()/2),
                                                pin_memory=True, collate_fn=collate_fn)
 
-    model = VQAModel(vocab_size=len(train_dataset.question2idx)+1, n_answer=len(train_dataset.answer2idx)).to(device)
+    model = VQAModel(n_answer=len(train_dataset.answer2idx)).to(device)
 
     # optimizer / criterion
     num_epoch = 20
