@@ -206,9 +206,10 @@ class BasicBlock(nn.Module):
 class BottleneckBlock(nn.Module):
     expansion = 4
 
-    def __init__(self, in_channels: int, out_channels: int, stride: int = 1):
+    def __init__(self, in_channels: int, out_channels: int, stride: int = 1, droprate: float = 0.2):
         super().__init__()
 
+        self.droprate = droprate
         self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=1)
         self.bn1 = nn.BatchNorm2d(out_channels)
         self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=stride, padding=1)
@@ -216,6 +217,7 @@ class BottleneckBlock(nn.Module):
         self.conv3 = nn.Conv2d(out_channels, out_channels * self.expansion, kernel_size=1, stride=1)
         self.bn3 = nn.BatchNorm2d(out_channels * self.expansion)
         self.relu = nn.ReLU(inplace=True)
+        self.dropout = nn.Dropout(p=self.droprate)
 
         self.shortcut = nn.Sequential()
         if stride != 1 or in_channels != out_channels * self.expansion:
@@ -227,11 +229,14 @@ class BottleneckBlock(nn.Module):
     def forward(self, x):
         residual = x
         out = self.relu(self.bn1(self.conv1(x)))
+        out = self.dropout(out)
         out = self.relu(self.bn2(self.conv2(out)))
+        out = self.dropout(out)
         out = self.bn3(self.conv3(out))
 
         out += self.shortcut(residual)
         out = self.relu(out)
+        out = self.dropout(out)
 
         return out
 
@@ -295,6 +300,7 @@ class VQAModel(nn.Module):
         self.fc = nn.Sequential(
             nn.Linear(768 + 512, 512),
             nn.ReLU(inplace=True),
+            nn.Dropout(0.2),
             nn.Linear(512, n_answer)
         )
 
