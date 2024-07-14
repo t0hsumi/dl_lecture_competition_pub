@@ -280,10 +280,14 @@ def ResNet50():
     return ResNet(BottleneckBlock, [3, 4, 6, 3])
 
 
+def ResNet152():
+    return ResNet(BottleneckBlock, [3, 8, 36, 3])
+
+
 class VQAModel(nn.Module):
     def __init__(self, n_answer: int):
         super().__init__()
-        self.resnet = ResNet50()
+        self.resnet = ResNet152()
         self.bert = BertModel.from_pretrained("bert-base-uncased")
         self.fc = nn.Sequential(
             nn.Linear(768 + 512, 512),
@@ -305,26 +309,45 @@ class VQAModel(nn.Module):
 
 
 def collate_fn(batch):
-    images, questions, answers, mode_answers = zip(*batch)
-    
-    # 画像をスタック
-    images = torch.stack(images)
+    if len(batch[0]) == 4:
+        images, questions, answers, mode_answers = zip(*batch)
 
-    # 質問のバッチをパディング
-    questions_input_ids = [q['input_ids'].squeeze(0) for q in questions]
-    questions_attention_mask = [q['attention_mask'].squeeze(0) for q in questions]
-    questions_input_ids = torch.nn.utils.rnn.pad_sequence(questions_input_ids, batch_first=True)
-    questions_attention_mask = torch.nn.utils.rnn.pad_sequence(questions_attention_mask, batch_first=True)
+        # 画像をスタック
+        images = torch.stack(images)
 
-    questions = {
-        'input_ids': questions_input_ids,
-        'attention_mask': questions_attention_mask
-    }
+        # 質問のバッチをパディング
+        questions_input_ids = [q['input_ids'].squeeze(0) for q in questions]
+        questions_attention_mask = [q['attention_mask'].squeeze(0) for q in questions]
+        questions_input_ids = torch.nn.utils.rnn.pad_sequence(questions_input_ids, batch_first=True)
+        questions_attention_mask = torch.nn.utils.rnn.pad_sequence(questions_attention_mask, batch_first=True)
 
-    answers = torch.stack(answers)
-    mode_answers = torch.tensor(mode_answers)
+        questions = {
+            'input_ids': questions_input_ids,
+            'attention_mask': questions_attention_mask
+        }
 
-    return images, questions, answers, mode_answers
+        answers = torch.stack(answers)
+        mode_answers = torch.tensor(mode_answers)
+
+        return images, questions, answers, mode_answers
+    else:
+        images, questions = zip(*batch)
+        
+        # 画像をスタック
+        images = torch.stack(images)
+
+        # 質問のバッチをパディング
+        questions_input_ids = [q['input_ids'].squeeze(0) for q in questions]
+        questions_attention_mask = [q['attention_mask'].squeeze(0) for q in questions]
+        questions_input_ids = torch.nn.utils.rnn.pad_sequence(questions_input_ids, batch_first=True)
+        questions_attention_mask = torch.nn.utils.rnn.pad_sequence(questions_attention_mask, batch_first=True)
+
+        questions = {
+            'input_ids': questions_input_ids,
+            'attention_mask': questions_attention_mask
+        }
+
+        return images, questions
 
 
 # 4. 学習の実装
@@ -337,7 +360,7 @@ def train(model, dataloader, optimizer, criterion, device):
 
     start = time.time()
     for image, question, answers, mode_answer in dataloader:
-        image, answer, mode_answer = \
+        image, answers, mode_answer = \
             image.to(device), answers.to(device), mode_answer.to(device)
 
         pred = model(image, question)
@@ -394,12 +417,12 @@ def main():
     test_dataset = VQADataset(df_path="./data/valid.json", image_dir="./data/valid", tokenizer=tokenizer, transform=transform, answer=False)
     test_dataset.update_dict(train_dataset)
 
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=64, shuffle=True,
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=20, shuffle=True,
                                                num_workers=int(os.cpu_count()/2),
                                                pin_memory=True, collate_fn=collate_fn)
-    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=1, shuffle=False,
+    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=20, shuffle=False,
                                                num_workers=int(os.cpu_count()/2),
-                                               pin_memory=True)
+                                               pin_memory=True, collate_fn=collate_fn)
 
     ## data augmentation
     transform1 = transforms.Compose([
@@ -409,7 +432,7 @@ def main():
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
     train_dataset1 = VQADataset(df_path="./data/train.json", image_dir="./data/train", tokenizer=tokenizer, transform=transform1)
-    train_loader1 = torch.utils.data.DataLoader(train_dataset1, batch_size=64, shuffle=True,
+    train_loader1 = torch.utils.data.DataLoader(train_dataset1, batch_size=20, shuffle=True,
                                                num_workers=int(os.cpu_count()/2),
                                                pin_memory=True, collate_fn=collate_fn)
 
@@ -445,17 +468,24 @@ def main():
     # 提出用ファイルの作成
     model.eval()
     submission = []
-    for image, question in test_loader:
-        image, question = image.to(device), question.to(device)
+    for batch in test_loader:
+        image, question = batch
+        image = image.to(device)
+        question['input_ids'] = question['input_ids'].to(device)
+        question['attention_mask'] = question['attention_mask'].to(device)
+
         pred = model(image, question)
-        pred = pred.argmax(1).cpu().item()
-        submission.append(pred)
+        pred = pred.argmax(1).cpu().tolist()
+        submission.extend(pred)
 
     submission = [train_dataset.idx2answer[id] for id in submission]
     submission = np.array(submission)
     os.mkdir("outputs/" + now.strftime('%Y%m%d_%H%M'))
     torch.save(model.state_dict(), "outputs/" + now.strftime('%Y%m%d_%H%M') + "/model.pth")
     np.save("outputs/" + now.strftime('%Y%m%d_%H%M') + "/submission.npy", submission)
+    del model, submission, train_dataset, test_dataset, train_loader, test_loader
+    torch.cuda.empty_cache()
+    gc.collect()
 
 if __name__ == "__main__":
     main()
