@@ -332,7 +332,7 @@ def collate_fn(batch):
         return images, questions, answers, mode_answers
     else:
         images, questions = zip(*batch)
-        
+
         # 画像をスタック
         images = torch.stack(images)
 
@@ -363,8 +363,17 @@ def train(model, dataloader, optimizer, criterion, device):
         image, answers, mode_answer = \
             image.to(device), answers.to(device), mode_answer.to(device)
 
-        pred = model(image, question)
-        loss = criterion(pred, mode_answer.squeeze())
+        ans_lst = [None] * len(answers)
+        for i in range(len(answers)):
+            lst = [0] * 41024
+            for ans in answers[i]:
+                lst[int(ans)] += 1 / len(answers[i])
+            ans_lst[i] = lst
+        ans_lst = torch.tensor(ans_lst).float().to(device)
+
+        output = model(image, question)
+        pred = torch.nn.functional.log_softmax(output, dim=1)
+        loss = criterion(pred, ans_lst)
 
         optimizer.zero_grad()
         loss.backward()
@@ -386,7 +395,7 @@ def eval(model, dataloader, optimizer, criterion, device):
 
     start = time.time()
     for image, question, answers, mode_answer in dataloader:
-        image, question, answer, mode_answer = \
+        image, question, answers, mode_answer = \
             image.to(device), question.to(device), answers.to(device), mode_answer.to(device)
 
         pred = model(image, question)
@@ -440,8 +449,8 @@ def main():
 
     # optimizer / criterion
     num_epoch = 20
-    criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-5)
+    criterion = nn.KLDivLoss()
+    optimizer = torch.optim.AdamW(model.parameters(), lr = 0.0001)
 
     # train model
     for epoch in range(num_epoch):
